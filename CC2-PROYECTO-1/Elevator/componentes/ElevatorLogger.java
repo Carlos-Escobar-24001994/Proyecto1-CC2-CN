@@ -1,4 +1,4 @@
-package Elevator.components;
+package Elevator.componentes;
 
 import java.util.logging.*;
 import java.io.IOException;

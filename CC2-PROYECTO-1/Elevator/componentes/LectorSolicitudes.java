@@ -1,4 +1,4 @@
-package Elevator.components;
+package Elevator.componentes;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -6,15 +6,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import Elevator.Direccion;
-import Elevator.SolicitudElevador;
+import Elevator.SolicitudExterna;
 
 public final class LectorSolicitudes {
 
     private LectorSolicitudes() {
     }
     
-    public static List<SolicitudElevador> cargar(String ruta) throws IOException {
-        List<SolicitudElevador> lista = new ArrayList<>();
+    public static List<SolicitudExterna> cargar(String ruta) throws IOException {
+        List<SolicitudExterna> lista = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(ruta))) {
             String linea;
             int numLinea = 0;
@@ -45,7 +45,7 @@ public final class LectorSolicitudes {
                 else
                     throw new IOException("Línea " + numLinea + " dirección inválida: " + dirTxt);
 
-                lista.add(new SolicitudElevador(piso, dir));
+                lista.add(new SolicitudExterna(piso, dir));
             }
         }
         return lista;

@@ -1,6 +1,6 @@
 package Elevator;
 
-import Elevator.components.MarcoPantalla;
+import Elevator.componentes.MarcoPantalla;
 import javax.swing.SwingUtilities;
 
 public class ElevatorManager {

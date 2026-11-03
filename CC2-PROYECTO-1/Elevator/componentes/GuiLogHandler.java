@@ -1,4 +1,4 @@
-package Elevator.components;
+package Elevator.componentes;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JTextArea;
@@ -16,7 +16,10 @@ public class GuiLogHandler extends Handler {
     public void publish(LogRecord record) {
         if (record == null)
             return;
-        SwingUtilities.invokeLater(() -> area.append(record.getMessage() + "\n"));
+        SwingUtilities.invokeLater(() -> {
+            area.append(record.getMessage() + "\n");
+            area.setCaretPosition(area.getDocument().getLength());
+        });
     }
 
     @Override

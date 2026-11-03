@@ -4,39 +4,35 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ManejoElevadores implements Runnable {
 
-    private final ConcurrentLinkedQueue<SolicitudElevador> solicitudes = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<SolicitudExterna> solicitudes = new ConcurrentLinkedQueue<>();
     private final Elevator[] elevadores;
     private volatile boolean enEjecucion = true;
 
     public ManejoElevadores(Elevator[] elevadores) {
         if (elevadores == null || elevadores.length == 0) {
-            throw new IllegalArgumentException("Debe haber mas de un elevador un elevador");
+            throw new IllegalArgumentException("Debe haber al menos un elevador");
         }
         this.elevadores = elevadores;
     }
 
-    public void solicitarElevador(int piso, Direccion direccion) {
-        solicitudes.offer(new SolicitudElevador(piso, direccion));
+    public synchronized void solicitarElevador(int piso, Direccion direccion) {
+        if (piso < 1 || piso > elevadores[0].getCantidadPisos()) {
+            throw new IllegalArgumentException("El piso solicitado está fuera de rango");
+        }
+        solicitudes.offer(new SolicitudExterna(piso, direccion));
     }
 
-    public void agregarSolicitudInterna(int idElevador, int piso) {
+    public synchronized void agregarSolicitudInterna(int idElevador, int piso) {
         Elevator elevador = buscarElevadorPorId(idElevador);
         if (elevador == null)
             return;
-        if (piso < 1 || piso > elevador.getTableroInterno().length)
-            return;
-        elevador.agregarSolicitud(piso);
+        elevador.agregarSolicitudInterna(new SolicitudInterna(piso));
     }
 
-    public void resetSistema() {
+    public synchronized void resetSistema() {
         solicitudes.clear();
-        for (Elevator elevador : elevadores) {
-            boolean[] tablero = elevador.getTableroInterno();
-            for (int i = 0; i < tablero.length; i++)
-                tablero[i] = false;
-            elevador.getsolicitudes().clear();
+        for (Elevator elevador : elevadores)
             elevador.resetElevador();
-        }
     }
 
     public void detener() {
@@ -51,20 +47,26 @@ public class ManejoElevadores implements Runnable {
     @Override
     public void run() {
         while (enEjecucion) {
-            SolicitudElevador solicitud = solicitudes.poll();
-            if (solicitud != null) {
-                asignarSolicitud(solicitud);
-            } else {
+            SolicitudExterna solicitud;
+            synchronized (this) {
+                solicitud = solicitudes.poll();
+                if (solicitud != null)
+                    asignarSolicitud(solicitud);
+            }
+            if (solicitud == null) {
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
                 }
             }
         }
     }
 
-    private void asignarSolicitud(SolicitudElevador solicitud) {
+    public int getCantidadSolicitudesPendientes() {
+        return solicitudes.size();
+    }
+
+    private void asignarSolicitud(SolicitudExterna solicitud) {
         int mejorIdx = -1;
         long mejorCosto = Long.MAX_VALUE;
         int mejorCarga = Integer.MAX_VALUE;
@@ -87,7 +89,7 @@ public class ManejoElevadores implements Runnable {
         }
 
         if (mejorIdx >= 0) {
-            elevadores[mejorIdx].agregarSolicitud(solicitud.getPiso());
+            elevadores[mejorIdx].agregarSolicitudExterna(solicitud);
             System.out.println("Asignado " + solicitud + " al elevador #" + elevadores[mejorIdx].getId() +
                     " (costo=" + mejorCosto + ", carga=" + mejorCarga + ", id=" + mejorId + ")");
         } else {
@@ -95,16 +97,16 @@ public class ManejoElevadores implements Runnable {
         }
     }
 
-    private long costoParaElevador(Elevator elevador, SolicitudElevador solicitud) {
+    private long costoParaElevador(Elevator elevador, SolicitudExterna solicitud) {
         int pisoElevador = elevador.getPisoActual();
         Direccion dirElevador = elevador.getDireccion();
         int pisoSolicitud = solicitud.getPiso();
         Direccion dirSolicitud = solicitud.getDireccion();
 
         int distancia = Math.abs(pisoElevador - pisoSolicitud);
-        boolean tieneParadas = hayParadasPendientes(elevador);
         int pendientes = contarParadasPendientes(elevador);
-        int pisosMax = elevador.getTableroInterno().length;
+        boolean tieneParadas = pendientes > 0;
+        int pisosMax = elevador.getCantidadPisos();
 
         if (!tieneParadas) {
             long base = distancia;
@@ -113,11 +115,11 @@ public class ManejoElevadores implements Runnable {
         }
 
         if (dirElevador == Direccion.UP && dirSolicitud == Direccion.UP && pisoSolicitud >= pisoElevador
-                && hayParadasArribaDesde(elevador, pisoElevador)) {
+                && elevador.tieneParadasEnRuta(Direccion.UP)) {
             return distancia + pendientes;
         }
         if (dirElevador == Direccion.DOWN && dirSolicitud == Direccion.DOWN && pisoSolicitud <= pisoElevador
-                && hayParadasAbajoDesde(elevador, pisoElevador)) {
+                && elevador.tieneParadasEnRuta(Direccion.DOWN)) {
             return distancia + pendientes;
         }
 
@@ -125,36 +127,8 @@ public class ManejoElevadores implements Runnable {
         return distancia + penalCambio + 2L * pendientes;
     }
 
-    private boolean hayParadasPendientes(Elevator elevador) {
-        for (boolean b : elevador.getTableroInterno())
-            if (b)
-                return true;
-        return !elevador.getsolicitudes().isEmpty();
-    }
-
     private int contarParadasPendientes(Elevator elevador) {
-        int aux = 0;
-        for (boolean b : elevador.getTableroInterno())
-            if (b)
-                aux++;
-        aux += elevador.getsolicitudes().size();
-        return aux;
-    }
-
-    private boolean hayParadasArribaDesde(Elevator elevador, int desde) {
-        boolean[] tablero = elevador.getTableroInterno();
-        for (int i = Math.max(0, desde - 1); i < tablero.length; i++)
-            if (tablero[i])
-                return true;
-        return false;
-    }
-
-    private boolean hayParadasAbajoDesde(Elevator elevador, int desde) {
-        boolean[] tablero = elevador.getTableroInterno();
-        for (int i = Math.min(tablero.length - 1, desde - 2); i >= 0; i--)
-            if (tablero[i])
-                return true;
-        return false;
+        return elevador.getCantidadParadasPendientes();
     }
 
     private Elevator buscarElevadorPorId(int id) {
